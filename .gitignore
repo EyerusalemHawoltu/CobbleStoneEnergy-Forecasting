@@ -1,0 +1,15 @@
+.env
+.claude/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+data/raw/*.parquet
+data/processed/*.parquet
+outputs/logs/*.jsonl
+.ipynb_checkpoints/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
