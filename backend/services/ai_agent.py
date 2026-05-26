@@ -169,13 +169,27 @@ def _strip_function_syntax(text: str) -> str:
     Remove raw <function=name>{...}</function> blocks that Llama on Groq
     occasionally leaks into message content alongside proper tool_calls.
     """
-    # Remove <function=name>...</function> blocks
     text = _re.sub(r"<function=[^>]+>.*?</function>", "", text, flags=_re.DOTALL)
-    # Remove orphan closing tags
     text = _re.sub(r"</function>", "", text)
-    # Collapse extra blank lines left behind
     text = _re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+def _parse_failed_generation(failed_gen: str) -> tuple[str | None, dict]:
+    """
+    Extract tool name and args from a malformed Groq function call string.
+    Handles both <function=name>{args}</function> and <function=name{args}</function>.
+    """
+    # Match function name (before any { or >) and the JSON args object
+    match = _re.search(r"<function=([a-z_]+)[^{]*(\{[^}]*\})", failed_gen)
+    if not match:
+        return None, {}
+    fn_name = match.group(1)
+    try:
+        fn_args = json.loads(match.group(2)) or {}
+    except (json.JSONDecodeError, TypeError):
+        fn_args = {}
+    return fn_name, fn_args
 
 
 def chat(
@@ -298,10 +312,54 @@ def chat(
             "latency_s": latency,
         }
 
+    except GroqBadRequestError as exc:
+        # Groq rejects malformed function calls (model generated invalid syntax).
+        # Recover by parsing the intended tool from failed_generation and calling it directly.
+        try:
+            err_body = exc.response.json() if exc.response else {}
+            failed_gen = err_body.get("error", {}).get("failed_generation", "")
+            fn_name, fn_args = _parse_failed_generation(failed_gen)
+            if fn_name:
+                logger.warning(f"Recovering from malformed tool call — executing {fn_name} directly")
+                result = _execute_tool(fn_name, fn_args, pipeline)
+                tool_results.append({"tool": fn_name, "args": fn_args, "result": result})
+                if isinstance(result, dict) and "error" not in result:
+                    structured_data = {"type": fn_name, **result}
+                # Ask model to interpret the result without tool calling
+                interp_messages = [
+                    {"role": "system", "content": system_with_date},
+                    {"role": "user", "content": message},
+                    {"role": "user", "content": (
+                        f"Data from {fn_name}: {json.dumps(result, default=str)[:3000]}\n"
+                        "Please interpret this concisely for a power trading desk."
+                    )},
+                ]
+                r = client.chat.completions.create(
+                    model=AGENT_MODEL,
+                    messages=interp_messages,
+                    max_tokens=1024,
+                    temperature=0.2,
+                )
+                final_text = _strip_function_syntax(r.choices[0].message.content or "")
+                latency = round(time.time() - t0, 2)
+                return {
+                    "response": final_text,
+                    "tool_calls": tool_results,
+                    "data": structured_data,
+                    "latency_s": latency,
+                }
+        except Exception as inner:
+            logger.error(f"Recovery also failed: {inner}")
+        return {
+            "response": "Sorry, the AI had trouble calling that tool. Please try rephrasing your question.",
+            "tool_calls": tool_results,
+            "data": None,
+        }
+
     except Exception as exc:
         logger.error(f"Agent error: {exc}\n{traceback.format_exc()}")
         return {
-            "response": f"Agent error: {exc}. Check logs for details.",
+            "response": f"Something went wrong. Please try again.",
             "tool_calls": tool_results,
             "data": None,
         }

@@ -1,0 +1,13 @@
+{
+  "tag": "qa_rules",
+  "timestamp_utc": "2026-05-26T15:17:14Z",
+  "model": "llama-3.1-8b-instant",
+  "prompt_preview": "You are a data quality engineer for a European power market pipeline that fetches hourly data from ENTSO-E Transparency for the German (DE) bidding zone.\n\nSCHEMA (column \u2192 dtype):\n{\n  \"da_price\": \"float64\",\n  \"load_mw\": \"float64\",\n  \"load_forecast_mw\": \"float64\"\n}\n\nDESCRIPTIVE STATISTICS:\n       da_price   load_mw  load_forecast_mw\ncount  21070.00  21070.00          21070.00\nmean      86.30  54070.98          54096.77\nstd       54.03   9363.87           8908.77\nmin     -499.99  32813.34         ",
+  "response": "[\n  {\n    \"field\": \"da_price\",\n    \"rule\": \"Non-negative DA price\",\n    \"condition\": \"df['da_price'] >= 0\",\n    \"severity\": \"error\"\n  },\n  {\n    \"field\": \"load_mw\",\n    \"rule\": \"Non-negative load\",\n    \"condition\": \"df['load_mw'] >= 0\",\n    \"severity\": \"error\"\n  },\n  {\n    \"field\": \"load_forecast_mw\",\n    \"rule\": \"Non-negative load forecast\",\n    \"condition\": \"df['load_forecast_mw'] >= 0\",\n    \"severity\": \"error\"\n  },\n  {\n    \"field\": \"da_price\",\n    \"rule\": \"DA price within reasonable range\",\n    \"condition\": \"df['da_price'] <= 1000\",\n    \"severity\": \"warning\"\n  },\n  {\n    \"field\": \"load_mw\",\n    \"rule\": \"Load within reasonable range\",\n    \"condition\": \"df['load_mw'] <= 80000\",\n    \"severity\": \"warning\"\n  },\n  {\n    \"field\": \"load_forecast_mw\",\n    \"rule\": \"Load forecast within reasonable range\",\n    \"condition\": \"df['load_forecast_mw'] <= 80000\",\n    \"severity\": \"warning\"\n  },\n  {\n    \"field\": \"da_price\",\n    \"rule\": \"DA price consistency with load\",\n    \"condition\": \"(df['da_price'] * df['load_mw']) >= 0\",\n    \"severity\": \"warning\"\n  }\n]",
+  "metadata": {
+    "model": "llama-3.1-8b-instant",
+    "latency_s": 1.04,
+    "input_tokens": 602,
+    "output_tokens": 332
+  }
+}

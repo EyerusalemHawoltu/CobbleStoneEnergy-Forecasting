@@ -101,7 +101,7 @@
       },
       {
         "field": "da_price",
-        "rule": "Within reasonable price range",
+        "rule": "DA price within reasonable range",
         "severity": "warning",
         "n_fail": 0,
         "pct_fail": 0.0,
@@ -110,7 +110,7 @@
       },
       {
         "field": "load_mw",
-        "rule": "Within reasonable load range",
+        "rule": "Load within reasonable range",
         "severity": "warning",
         "n_fail": 0,
         "pct_fail": 0.0,
@@ -119,7 +119,7 @@
       },
       {
         "field": "load_forecast_mw",
-        "rule": "Within reasonable load forecast range",
+        "rule": "Load forecast within reasonable range",
         "severity": "warning",
         "n_fail": 0,
         "pct_fail": 0.0,
@@ -128,39 +128,12 @@
       },
       {
         "field": "da_price",
-        "rule": "Within reasonable price range",
+        "rule": "DA price consistency with load",
         "severity": "warning",
-        "n_fail": 0,
-        "pct_fail": 0.0,
-        "passed": true,
-        "condition": "df['da_price'] >= -500"
-      },
-      {
-        "field": "load_mw",
-        "rule": "Within reasonable load range",
-        "severity": "warning",
-        "n_fail": 0,
-        "pct_fail": 0.0,
-        "passed": true,
-        "condition": "df['load_mw'] >= 0"
-      },
-      {
-        "field": "load_forecast_mw",
-        "rule": "Within reasonable load forecast range",
-        "severity": "warning",
-        "n_fail": 0,
-        "pct_fail": 0.0,
-        "passed": true,
-        "condition": "df['load_forecast_mw'] >= 0"
-      },
-      {
-        "field": "load_mw",
-        "rule": "Load forecast should be greater than or equal to load",
-        "severity": "error",
-        "n_fail": 10282,
-        "pct_fail": 48.8,
+        "n_fail": 1261,
+        "pct_fail": 5.98,
         "passed": false,
-        "condition": "df['load_forecast_mw'] >= df['load_mw']"
+        "condition": "(df['da_price'] * df['load_mw']) >= 0"
       }
     ]
   }
