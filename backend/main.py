@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -28,11 +29,17 @@ from backend.services.pipeline_service import pipeline
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting up — initialising pipeline…")
-    try:
-        pipeline.initialise()
-    except Exception as exc:
-        logger.error(f"Pipeline init failed: {exc}. App starts in degraded state.")
+    # Run the heavy pipeline init (~7 min) in a background thread so the server
+    # starts accepting requests immediately (Railway health check, frontend polling).
+    logger.info("Starting up — spawning pipeline initialisation in background thread…")
+
+    def _bg_init():
+        try:
+            pipeline.initialise()
+        except Exception as exc:
+            logger.error(f"Pipeline init failed: {exc}. App running in degraded state.")
+
+    threading.Thread(target=_bg_init, daemon=True).start()
     yield
     logger.info("Shutting down.")
 
@@ -47,11 +54,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Allow React dev server on :5173 and production on :3000
+# CORS — in production set CORS_ORIGINS=https://your-app.vercel.app
+# In dev (env var unset) defaults to allow all origins.
+_cors_env = os.getenv("CORS_ORIGINS", "").strip()
+_cors_origins: list[str] = (
+    [o.strip() for o in _cors_env.split(",") if o.strip()]
+    if _cors_env
+    else ["*"]
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
