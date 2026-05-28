@@ -54,17 +54,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — in production set CORS_ORIGINS=https://your-app.vercel.app
-# In dev (env var unset) defaults to allow all origins.
-_cors_env = os.getenv("CORS_ORIGINS", "").strip()
-_cors_origins: list[str] = (
-    [o.strip() for o in _cors_env.split(",") if o.strip()]
-    if _cors_env
-    else ["*"]
-)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins,
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
