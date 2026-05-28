@@ -358,8 +358,13 @@ def chat(
 
     except Exception as exc:
         logger.error(f"Agent error: {exc}\n{traceback.format_exc()}")
+        exc_str = str(exc).lower()
+        if "rate_limit" in exc_str or "rate limit" in exc_str or "429" in exc_str or "too many" in exc_str:
+            msg = "⏳ Groq rate limit reached (free tier). Please wait ~1 minute and try again."
+        else:
+            msg = "Something went wrong. Please try again."
         return {
-            "response": f"Something went wrong. Please try again.",
+            "response": msg,
             "tool_calls": tool_results,
             "data": None,
         }
