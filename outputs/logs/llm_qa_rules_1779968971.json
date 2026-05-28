@@ -1,0 +1,13 @@
+{
+  "tag": "qa_rules",
+  "timestamp_utc": "2026-05-28T11:49:31Z",
+  "model": "llama-3.1-8b-instant",
+  "prompt_preview": "You are a data quality engineer for a European power market pipeline that fetches hourly data from ENTSO-E Transparency for the German (DE) bidding zone.\n\nDOMAIN KNOWLEDGE (critical \u2014 rules must respect these facts):\n- da_price (Day-Ahead price EUR/MWh): CAN be negative. EPEX SPOT allows prices from -500 to +4000 EUR/MWh. Negative prices are normal during high-wind/low-demand hours. NEVER propose a non-negative rule for da_price.\n- load_mw and load_forecast_mw: system load in MW \u2014 must be positi",
+  "response": "[\n  {\n    \"field\": \"da_price\",\n    \"rule\": \"Price must be within -500 to 4000 EUR/MWh\",\n    \"condition\": \"df['da_price'] >= -500\",\n    \"severity\": \"error\"\n  },\n  {\n    \"field\": \"da_price\",\n    \"rule\": \"Price must be within -500 to 4000 EUR/MWh\",\n    \"condition\": \"df['da_price'] <= 4000\",\n    \"severity\": \"error\"\n  },\n  {\n    \"field\": \"load_mw\",\n    \"rule\": \"Load must be within 15,000 to 90,000 MW\",\n    \"condition\": \"df['load_mw'] >= 15000\",\n    \"severity\": \"error\"\n  },\n  {\n    \"field\": \"load_mw\",\n    \"rule\": \"Load must be within 15,000 to 90,000 MW\",\n    \"condition\": \"df['load_mw'] <= 90000\",\n    \"severity\": \"error\"\n  },\n  {\n    \"field\": \"load_forecast_mw\",\n    \"rule\": \"Load forecast must be within 15,000 to 90,000 MW\",\n    \"condition\": \"df['load_forecast_mw'] >= 15000\",\n    \"severity\": \"error\"\n  },\n  {\n    \"field\": \"load_forecast_mw\",\n    \"rule\": \"Load forecast must be within 15,000 to 90,000 MW\",\n    \"condition\": \"df['load_forecast_mw'] <= 90000\",\n    \"severity\": \"error\"\n  },\n  {\n    \"field\": \"wind_solar_da_mw\",\n    \"rule\": \"Wind and solar generation must be non-negative\",\n    \"condition\": \"df['wind_solar_da_mw'] >= 0\",\n    \"severity\": \"error\"\n  },\n  {\n    \"field\": \"wind_solar_actual_mw\",\n    \"rule\": \"Wind and solar actual generation must be non-negative\",\n    \"condition\": \"df['wind_solar_actual_mw'] >= 0\",\n    \"severity\": \"error\"\n  }\n]",
+  "metadata": {
+    "model": "llama-3.1-8b-instant",
+    "latency_s": 0.97,
+    "input_tokens": 1003,
+    "output_tokens": 453
+  }
+}

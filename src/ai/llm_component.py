@@ -69,6 +69,17 @@ _QA_RULES_PROMPT = """\
 You are a data quality engineer for a European power market pipeline that fetches \
 hourly data from ENTSO-E Transparency for the German (DE) bidding zone.
 
+DOMAIN KNOWLEDGE (critical — rules must respect these facts):
+- da_price (Day-Ahead price EUR/MWh): CAN be negative. EPEX SPOT allows prices from \
+-500 to +4000 EUR/MWh. Negative prices are normal during high-wind/low-demand hours. \
+NEVER propose a non-negative rule for da_price.
+- load_mw and load_forecast_mw: system load in MW — must be positive (15,000–90,000 MW for DE).
+- wind_solar_da_mw, wind_solar_actual_mw: combined wind+solar generation in MW — must be \
+non-negative. There is NO fixed relationship between load and wind_solar generation; \
+do NOT propose rules comparing load to wind_solar.
+- All columns are independently measured series. Cross-column arithmetic identities \
+(e.g. load = forecast + generation) do not apply.
+
 SCHEMA (column → dtype):
 {schema}
 
@@ -87,7 +98,8 @@ Each element must be an object with exactly these keys:
 'df' as the DataFrame variable. Use pandas methods only.
   "severity"  : "error" or "warning"
 
-Focus on physical plausibility, non-negative generation, cross-field consistency.
+Focus on physical plausibility and range checks only. Do NOT invent cross-column \
+arithmetic identities.
 """
 
 
@@ -174,9 +186,47 @@ Close with one sentence on the implied direction for the prompt-month contract.
 """
 
 
+def _fmt(metrics: dict[str, Any]) -> dict[str, Any]:
+    """Replace NaN floats with readable 'N/A' strings for prompt formatting."""
+    import math
+    out = {}
+    for k, v in metrics.items():
+        if isinstance(v, float) and math.isnan(v):
+            out[k] = "N/A"
+        else:
+            out[k] = v
+    return out
+
+
 def generate_daily_commentary(metrics: dict[str, Any]) -> str:
     """Generate market commentary from computed metrics. Returns fallback on failure."""
-    prompt = _COMMENTARY_PROMPT.format(**metrics)
+    safe = _fmt(metrics)
+    # Reformat numeric fields that have format specs in the template
+    def _s(v, spec):
+        if v == "N/A":
+            return "N/A"
+        return format(v, spec)
+
+    prompt = (
+        _COMMENTARY_PROMPT
+        .replace("{base_avg:.2f}", _s(safe["base_avg"], ".2f"))
+        .replace("{peak_avg:.2f}", _s(safe["peak_avg"], ".2f"))
+        .replace("{offpeak_avg:.2f}", _s(safe["offpeak_avg"], ".2f"))
+        .replace("{p10:.2f}", _s(safe["p10"], ".2f"))
+        .replace("{p90:.2f}", _s(safe["p90"], ".2f"))
+        .replace("{wow_change:+.2f}", _s(safe["wow_change"], "+.2f") if safe["wow_change"] != "N/A" else "N/A")
+        .replace("{wow_pct:+.1f}", _s(safe["wow_pct"], "+.1f") if safe["wow_pct"] != "N/A" else "N/A")
+        .replace("{load_mw:.0f}", _s(safe["load_mw"], ".0f"))
+        .replace("{wind_mw:.0f}", _s(safe["wind_mw"], ".0f"))
+        .replace("{wind_pen:.1%}", _s(safe["wind_pen"], ".1%") if safe["wind_pen"] != "N/A" else "N/A")
+        .replace("{solar_mw:.0f}", _s(safe["solar_mw"], ".0f"))
+        .replace("{solar_pen:.1%}", _s(safe["solar_pen"], ".1%") if safe["solar_pen"] != "N/A" else "N/A")
+        .replace("{residual_mw:.0f}", _s(safe["residual_mw"], ".0f"))
+        .replace("{yesterday_avg:.2f}", _s(safe["yesterday_avg"], ".2f"))
+        .replace("{roll7d:.2f}", _s(safe["roll7d"], ".2f"))
+        .replace("{roll30d:.2f}", _s(safe["roll30d"], ".2f"))
+        .replace("{date}", str(safe["date"]))
+    )
     t0 = time.time()
     try:
         client = _get_client()
@@ -235,7 +285,8 @@ def build_commentary_metrics(
     roll7d = float(past.tail(168).mean()) if len(past) >= 24 else float("nan")
     roll30d = float(past.tail(720).mean()) if len(past) >= 24 else float("nan")
 
-    feat_day = df_features.loc[day_mask] if day_mask.any() else pd.DataFrame()
+    feat_day_mask = df_features.index.normalize() == target_date.normalize()
+    feat_day = df_features.loc[feat_day_mask] if feat_day_mask.any() else pd.DataFrame()
     load_mw = float(feat_day["load_mw"].mean()) if "load_mw" in feat_day.columns and len(feat_day) > 0 else float("nan")
     wind_mw = float(feat_day["wind_total_mw"].mean()) if "wind_total_mw" in feat_day.columns and len(feat_day) > 0 else float("nan")
     solar_mw = float(feat_day["solar_mw"].mean()) if "solar_mw" in feat_day.columns and len(feat_day) > 0 else float("nan")

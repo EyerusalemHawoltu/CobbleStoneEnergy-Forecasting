@@ -1,0 +1,14 @@
+{
+  "tag": "daily_commentary",
+  "timestamp_utc": "2026-05-28T11:15:03Z",
+  "model": "llama-3.3-70b-versatile",
+  "prompt_preview": "You are a European power market analyst writing the daily morning note for the German day-ahead desk. Write a concise 3\u20134 sentence commentary based ONLY on the metrics below. Do NOT invent any numbers; use only the figures provided.\n\nDATE: 2026-05-28\n\nFORECAST DA PRICES (EUR/MWh):\n  Base average:      N/A\n  Peak average:      N/A\n  Off-peak average:  N/A\n  P10:               N/A\n  P90:               N/A\n\nWEEK-OVER-WEEK CHANGE (vs same weekday -7d):\n  Base WoW:          N/A EUR/MWh  (N/A%)\n\nFUNDA",
+  "response": "The lack of available data on forecast day-ahead prices and fundamentals makes it challenging to assess the current market situation. However, recent price history shows that yesterday's average price was 80.00 EUR/MWh, which is lower than the 7-day and 30-day rolling averages of 90.28 EUR/MWh and 95.47 EUR/MWh, respectively. The 7-day rolling average has been trending lower than the 30-day rolling average, indicating a potential downward trend. The implied direction for the prompt-month contract is likely to be bearish given the recent price movements.",
+  "metadata": {
+    "model": "llama-3.3-70b-versatile",
+    "latency_s": 0.53,
+    "input_tokens": 288,
+    "output_tokens": 120,
+    "date": "2026-05-28"
+  }
+}

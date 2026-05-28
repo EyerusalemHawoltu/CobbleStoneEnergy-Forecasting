@@ -1,0 +1,10 @@
+{
+  "tag": "commentary_error",
+  "timestamp_utc": "2026-05-26T15:48:15Z",
+  "model": "llama-3.1-8b-instant",
+  "prompt_preview": "You are a European power market analyst writing the daily morning note for the German day-ahead desk. Write a concise 3\u20134 sentence commentary based ONLY on the metrics below. Do NOT invent any numbers; use only the figures provided.\n\nDATE: 2026-05-27\n\nFORECAST DA PRICES (EUR/MWh):\n  Base average:      69.91\n  Peak average:      37.95\n  Off-peak average:  108.25\n  P10:               -5.37\n  P90:               127.79\n\nWEEK-OVER-WEEK CHANGE (vs same weekday -7d):\n  Base WoW:          -38.86 EUR/MWh",
+  "response": "",
+  "metadata": {
+    "error": "Traceback (most recent call last):\n  File \"/Users/eyerusalemhawoltu/Desktop/CobbleStoneEnergy-Forecasting/src/ai/llm_component.py\", line 220, in generate_daily_commentary\n    client = _get_client()\n  File \"/Users/eyerusalemhawoltu/Desktop/CobbleStoneEnergy-Forecasting/src/ai/llm_component.py\", line 43, in _get_client\n    raise ValueError(\nValueError: GROQ_API_KEY not set. Register free at console.groq.com and set the env variable.\n"
+  }
+}

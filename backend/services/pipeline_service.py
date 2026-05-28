@@ -224,15 +224,52 @@ class PipelineService:
             for h in hours:
                 if h in self.df_raw.index and not np.isnan(self.df_raw.loc[h, "load_forecast_mw"]):
                     df_future.loc[h, "load_mw"] = self.df_raw.loc[h, "load_forecast_mw"]
-            if df_future["load_mw"].isna().any() and "load_mw" in self.df_raw.columns:
-                fallback = float(self.df_raw["load_mw"].tail(24 * 7).mean())
-                df_future["load_mw"] = df_future["load_mw"].fillna(fallback)
+                    df_future.loc[h, "load_forecast_mw"] = self.df_raw.loc[h, "load_forecast_mw"]
+        # Fill any missing load values (including when target date is beyond df_raw)
+        if self.df_raw is not None and "load_mw" in self.df_raw.columns:
+            load_fallback = float(self.df_raw["load_mw"].tail(24 * 7).mean())
         elif self.df_feat is not None and "load_mw" in self.df_feat.columns:
-            df_future["load_mw"] = float(self.df_feat["load_mw"].tail(24 * 7).mean())
+            load_fallback = float(self.df_feat["load_mw"].tail(24 * 7).mean())
+        else:
+            load_fallback = 55000.0
+        if "load_mw" not in df_future.columns:
+            df_future["load_mw"] = load_fallback
+        else:
+            df_future["load_mw"] = df_future["load_mw"].fillna(load_fallback)
+        if "load_forecast_mw" not in df_future.columns:
+            df_future["load_forecast_mw"] = load_fallback
+        else:
+            df_future["load_forecast_mw"] = df_future["load_forecast_mw"].fillna(load_fallback)
 
         # Lagged load rolling mean
         if self.df_feat is not None and "load_mw" in self.df_feat.columns:
             df_future["load_roll7d_mean"] = float(self.df_feat["load_mw"].tail(24 * 7).mean())
+
+        # Wind+solar DA forecast: use published values from df_raw if available
+        if self.df_raw is not None and "wind_solar_da_mw" in self.df_raw.columns:
+            ws_fallback = float(self.df_raw["wind_solar_da_mw"].tail(24 * 7).mean())
+            for h in hours:
+                if h in self.df_raw.index:
+                    val = self.df_raw.loc[h, "wind_solar_da_mw"]
+                    if not (isinstance(val, float) and np.isnan(val)):
+                        df_future.loc[h, "wind_solar_da_mw"] = val
+            if "wind_solar_da_mw" not in df_future.columns:
+                df_future["wind_solar_da_mw"] = ws_fallback
+            else:
+                df_future["wind_solar_da_mw"] = df_future["wind_solar_da_mw"].fillna(ws_fallback)
+        elif self.df_feat is not None and "wind_solar_da_mw" in self.df_feat.columns:
+            df_future["wind_solar_da_mw"] = float(self.df_feat["wind_solar_da_mw"].tail(24 * 7).mean())
+
+        # Derived renewable features for future rows
+        if "wind_solar_da_mw" in df_future.columns and "load_mw" in df_future.columns:
+            ws = df_future["wind_solar_da_mw"].fillna(0)
+            load = df_future["load_mw"].replace(0, np.nan)
+            df_future["ren_pen"] = (ws / load).clip(0, 1)
+            df_future["residual_load_mw"] = df_future["load_mw"] - ws
+        if self.df_feat is not None and "wind_solar_da_mw" in self.df_feat.columns:
+            df_future["wind_solar_roll7d_mean"] = float(
+                self.df_feat["wind_solar_da_mw"].tail(24 * 7).mean()
+            )
 
         return df_future
 
@@ -371,10 +408,8 @@ class PipelineService:
                 target = pd.Timestamp(date_str, tz="UTC")
             except Exception:
                 target = self.predictions.index.normalize().unique()[-1]
-                target = pd.Timestamp(target[0])
         else:
             target = self.predictions.index.normalize().unique()[-1]
-            target = pd.Timestamp(str(target[0]), tz="UTC")
 
         metrics = build_commentary_metrics(
             self.predictions, self.actuals, self.df_feat, target

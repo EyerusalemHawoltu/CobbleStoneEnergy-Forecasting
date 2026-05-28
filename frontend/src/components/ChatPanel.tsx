@@ -17,7 +17,6 @@ const SUGGESTIONS = [
   "How accurate is the LightGBM model?",
   "What's the current trading signal?",
   "Run data quality checks",
-  "Generate market commentary",
 ];
 
 interface Props {
@@ -127,8 +126,8 @@ export default function ChatPanel({ onDataReceived }: Props) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Suggestions */}
-      {messages.length <= 1 && (
+      {/* Suggestions — always visible */}
+      {!loading && (
         <div style={{ padding: "0 16px 12px", display: "flex", flexWrap: "wrap", gap: 6 }}>
           {SUGGESTIONS.map((s) => (
             <button key={s} onClick={() => send(s)} style={{

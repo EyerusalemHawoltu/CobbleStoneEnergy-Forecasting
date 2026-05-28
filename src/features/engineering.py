@@ -27,14 +27,12 @@ FEATURE_COLS = [
     "price_roll7d_mean",
     "price_roll7d_std",
     "price_roll30d_mean",
-    "wind_total_mw",
-    "solar_mw",
     "load_mw",
-    "wind_pen",
-    "solar_pen",
+    "load_forecast_mw",
+    "wind_solar_da_mw",
     "ren_pen",
     "residual_load_mw",
-    "wind_roll7d_mean",
+    "wind_solar_roll7d_mean",
     "load_roll7d_mean",
 ]
 
@@ -74,24 +72,30 @@ def add_price_lags(df: pd.DataFrame) -> pd.DataFrame:
 
 def add_renewable_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    has_wind = "wind_onshore_mw" in df.columns or "wind_offshore_mw" in df.columns
-    has_solar = "solar_mw" in df.columns
     load = df.get("load_mw", pd.Series(np.nan, index=df.index))
 
+    # ── Path 1: separate wind + solar columns (from ENTSO-E API) ──────────────
+    has_wind = "wind_onshore_mw" in df.columns or "wind_offshore_mw" in df.columns
+    has_solar = "solar_mw" in df.columns
     if has_wind:
         if "wind_onshore_mw" in df.columns and "wind_offshore_mw" in df.columns:
             df["wind_total_mw"] = df["wind_onshore_mw"].fillna(0) + df["wind_offshore_mw"].fillna(0)
         else:
             df["wind_total_mw"] = df["wind_onshore_mw"].fillna(0)
-
         solar = df["solar_mw"].fillna(0) if has_solar else pd.Series(0, index=df.index)
-        df["wind_pen"] = (df["wind_total_mw"] / load.replace(0, np.nan)).clip(0, 1)
-        df["solar_pen"] = (solar / load.replace(0, np.nan)).clip(0, 1)
-        df["ren_pen"] = ((df["wind_total_mw"] + solar) / load.replace(0, np.nan)).clip(0, 1)
-        df["residual_load_mw"] = load - df["wind_total_mw"] - solar
-        df["wind_roll7d_mean"] = df["wind_total_mw"].shift(24).rolling(168).mean()
+        df["wind_solar_da_mw"] = df["wind_total_mw"] + solar
+        df["ren_pen"] = (df["wind_solar_da_mw"] / load.replace(0, np.nan)).clip(0, 1)
+        df["residual_load_mw"] = load - df["wind_solar_da_mw"]
+        df["wind_solar_roll7d_mean"] = df["wind_solar_da_mw"].shift(24).rolling(168).mean()
 
-    # Lagged load feature (shift 24h to avoid leakage)
+    # ── Path 2: combined wind+solar DA forecast column (from local CSVs) ──────
+    elif "wind_solar_da_mw" in df.columns:
+        ws = df["wind_solar_da_mw"].fillna(0)
+        df["ren_pen"] = (ws / load.replace(0, np.nan)).clip(0, 1)
+        df["residual_load_mw"] = load - ws
+        df["wind_solar_roll7d_mean"] = ws.shift(24).rolling(168).mean()
+
+    # Lagged load rolling mean (shift 24h to avoid leakage)
     if "load_mw" in df.columns:
         df["load_roll7d_mean"] = df["load_mw"].shift(24).rolling(168).mean()
     return df

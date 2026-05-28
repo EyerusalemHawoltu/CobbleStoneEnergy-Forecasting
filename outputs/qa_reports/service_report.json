@@ -1,12 +1,14 @@
 {
   "dataset_shape": {
     "rows": 21070,
-    "cols": 3
+    "cols": 5
   },
   "columns": [
     "da_price",
     "load_mw",
-    "load_forecast_mw"
+    "load_forecast_mw",
+    "wind_solar_da_mw",
+    "wind_solar_actual_mw"
   ],
   "missingness": {
     "da_price": {
@@ -18,6 +20,14 @@
       "pct_missing": 0.0
     },
     "load_forecast_mw": {
+      "n_missing": 0,
+      "pct_missing": 0.0
+    },
+    "wind_solar_da_mw": {
+      "n_missing": 0,
+      "pct_missing": 0.0
+    },
+    "wind_solar_actual_mw": {
       "n_missing": 0,
       "pct_missing": 0.0
     }
@@ -68,73 +78,16 @@
       "iqr_fence_low": -12183.83,
       "iqr_fence_high": 120374.95,
       "n_outliers": 0
+    },
+    "wind_solar_da_mw": {
+      "iqr_fence_low": -46224.33,
+      "iqr_fence_high": 69167.32,
+      "n_outliers": 0
+    },
+    "wind_solar_actual_mw": {
+      "iqr_fence_low": -46868.2,
+      "iqr_fence_high": 69868.66,
+      "n_outliers": 0
     }
-  },
-  "llm_rules": {
-    "llm_rules": [
-      {
-        "field": "da_price",
-        "rule": "Non-negative DA price",
-        "severity": "error",
-        "n_fail": 1261,
-        "pct_fail": 5.98,
-        "passed": false,
-        "condition": "df['da_price'] >= 0"
-      },
-      {
-        "field": "load_mw",
-        "rule": "Non-negative load",
-        "severity": "error",
-        "n_fail": 0,
-        "pct_fail": 0.0,
-        "passed": true,
-        "condition": "df['load_mw'] >= 0"
-      },
-      {
-        "field": "load_forecast_mw",
-        "rule": "Non-negative load forecast",
-        "severity": "error",
-        "n_fail": 0,
-        "pct_fail": 0.0,
-        "passed": true,
-        "condition": "df['load_forecast_mw'] >= 0"
-      },
-      {
-        "field": "da_price",
-        "rule": "DA price within reasonable range",
-        "severity": "warning",
-        "n_fail": 0,
-        "pct_fail": 0.0,
-        "passed": true,
-        "condition": "df['da_price'] <= 1000"
-      },
-      {
-        "field": "load_mw",
-        "rule": "Load within reasonable range",
-        "severity": "warning",
-        "n_fail": 0,
-        "pct_fail": 0.0,
-        "passed": true,
-        "condition": "df['load_mw'] <= 80000"
-      },
-      {
-        "field": "load_forecast_mw",
-        "rule": "Load forecast within reasonable range",
-        "severity": "warning",
-        "n_fail": 0,
-        "pct_fail": 0.0,
-        "passed": true,
-        "condition": "df['load_forecast_mw'] <= 80000"
-      },
-      {
-        "field": "da_price",
-        "rule": "DA price consistency with load",
-        "severity": "warning",
-        "n_fail": 1261,
-        "pct_fail": 5.98,
-        "passed": false,
-        "condition": "(df['da_price'] * df['load_mw']) >= 0"
-      }
-    ]
   }
 }

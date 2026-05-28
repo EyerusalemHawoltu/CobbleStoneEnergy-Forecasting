@@ -1,7 +1,7 @@
 # European Power Fair Value: Forecasting Day-Ahead and Translating to Prompt Curve Views
 
-**Name:** Eyerusalem Hawoltu  
-**Email:** eyerusalem.hawoltu@example.com
+**Name:** Eyerusalem Hawoltu Afework
+**Email:** eh3115@nyu.edu
 
 ---
 
@@ -15,38 +15,39 @@ I chose **Germany (DE)** — the largest and most liquid European power market, 
 |---|---|---|---|
 | Day-Ahead Prices | A44 | `in_Domain=10Y1001A1001A63L`, `out_Domain=10Y1001A1001A63L` | Hourly |
 | Actual Total Load | A65 | `processType=A16`, `outBiddingZone_Domain=10Y1001A1001A63L` | 15-min → resampled 1h |
-| Wind Onshore Gen | A69 | `processType=A16`, `psrType=B18` | 15-min → 1h |
-| Wind Offshore Gen | A69 | `processType=A16`, `psrType=B19` | 15-min → 1h |
-| Solar Generation | A69 | `processType=A16`, `psrType=B16` | 15-min → 1h |
+| Day-Ahead Load Forecast | A65 | `processType=A01`, `outBiddingZone_Domain=10Y1001A1001A63L` | 15-min → resampled 1h |
+| Wind+Solar Onshore Gen Forecast | A69 | `processType=A01`, `psrType=B18+B16`, `outBiddingZone_Domain=10Y1001A1001A63L` | 15-min → resampled 1h |
 
-The Python client `entsoe-py` wraps these REST calls. API requests are chunked monthly to stay within rate limits; results are cached to Parquet files.
+**Full API documentation**: https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html
 
-**Full Postman/API documentation**: https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html
+Data was manually exported from ENTSO-E Transparency and loaded from local CSV files (`data/raw/energyprice{YYYY}.csv`, `data/raw/load{YYYY}.csv`). The pipeline also supports direct ENTSO-E API ingestion via `entsoe-py` when `ENTSOE_API_KEY` is set. Coverage: **2024-01-01 → 2026-05-27** (21,070 hourly rows).
+
+**Three fundamental drivers (two distinct physical categories):**
+1. `load_mw` / `load_forecast_mw` — ENTSO-E A65 actual load and TSO day-ahead load forecast; gate-closure safe (published before noon D for all D+1 hours)
+2. `wind_solar_da_mw` — ENTSO-E A69 combined wind onshore + solar day-ahead generation forecast for DE-LU bidding zone; gate-closure safe (TSO publishes before the DA auction closes)
 
 ### Timezone & DST Handling
 
-ENTSO-E returns timestamps in local CET/CEST (UTC+1/+2). The `entsoe-py` library preserves timezone-aware `pd.DatetimeIndex` objects. The pipeline immediately converts all timestamps to **UTC** for storage (`tz_convert("UTC")`). Local time is reconstructed only for display (`tz_convert("Europe/Berlin")`). This means DST transitions (spring-forward = 23h day, fall-back = 25h day) are handled correctly: UTC storage is always monotonic and gap-free, and the resampling step works in wall-clock UTC hours.
+ENTSO-E exports timestamps in local CET/CEST. The pipeline parses them with explicit UTC conversion (`tz_convert("UTC")`) immediately on load. All internal storage is UTC. Local time is reconstructed only for display (`tz_convert("Europe/Berlin")`). DST transitions (23h/25h days) are handled correctly: UTC storage is monotonic and gap-free, and all resampling runs in UTC hours.
 
 ### Data QA Checks
 
-Three layers of automated checks are implemented in `src/data/qa.py`:
+Three layers of automated checks in `src/data/qa.py`:
 
 **1. Structural checks**
-- Missingness report: NaN count and % per column
-- Duplicate index / row detection
-- Temporal coverage audit: expected vs. actual hour count, gap timestamps
+- Missingness: 0 NaNs across all 3 columns (21,070 rows)
+- Duplicate index/row detection: 0 duplicates
+- Temporal coverage: 21,070/21,070 expected hours, 0 gaps
 
-**2. Numerical checks**
-- Hard-limit violations (physical bounds per column):
-  - DA Price: −500 to +4,000 EUR/MWh
-  - Load: 15,000–90,000 MW
-  - Wind: 0–70,000 MW onshore, 0–10,000 MW offshore
-  - Solar: 0–80,000 MW
-- IQR outlier detection (k=4 × IQR fence)
+**2. Hard-limit checks (physical bounds)**
+| Column | Min observed | Max observed | Violations |
+|---|---|---|---|
+| `da_price` | −500.00 EUR/MWh | 936.28 EUR/MWh | 0 |
+| `load_mw` | 32,813 MW | 79,008 MW | 0 |
 
-**3. LLM-proposed checks** (AI component — see §4)
+**3. LLM-proposed checks** — see §4
 
-All results are written to `outputs/qa_reports/de_power_qa_report.json`.
+Results written to `outputs/qa_reports/service_report.json`.
 
 ---
 
@@ -54,57 +55,59 @@ All results are written to `outputs/qa_reports/de_power_qa_report.json`.
 
 ### Target: Option A — Hourly Day-Ahead Prices
 
-I chose **Option A**: forecast next-day hourly DA prices, then derive delivery-period averages (week, month) from the forecast distribution. This directly corresponds to how the DA auction works and allows natural aggregation to any delivery period.
+I forecast next-day hourly DA prices, then aggregate to delivery-period averages (day, week, month). This directly mirrors the DA auction structure and allows natural aggregation to any delivery period.
 
 ### Features
 
-Features are engineered in `src/features/engineering.py`. The **no-leakage rule**: all features visible to the model at "gate-closure" (noon on day D, when DA for day D+1 is settled) use at least 24h lags on price and fundamentals.
+All features respect the gate-closure constraint: the model only uses information available at noon on day D when predicting all 24 hours of day D+1. Price features use ≥24h lags; load actuals are shifted 24h.
 
 | Feature Group | Features |
 |---|---|
-| Calendar | hour, day-of-week, month, day-of-year, is_weekend, is_summer |
-| Price lags | lag_24h, lag_48h, lag_168h, roll7d_mean, roll7d_std, roll30d_mean |
-| Fundamentals | wind_total_mw, solar_mw, load_mw |
-| Derived | wind_pen (wind/load), solar_pen, ren_pen (total VRE/load), residual_load_mw |
-| Rolling fundamentals | wind_roll7d_mean, load_roll7d_mean |
+| Calendar | `hour`, `dow`, `month`, `doy`, `is_weekend`, `is_summer` |
+| Price lags | `lag_24h`, `lag_48h`, `lag_168h`, `roll7d_mean`, `roll7d_std`, `roll30d_mean` |
+| Load fundamentals | `load_mw` (actual load), `load_forecast_mw` (D+1 TSO forecast, gate-closure safe), `load_roll7d_mean` (24h-shifted rolling mean) |
+| Renewable fundamental | `wind_solar_da_mw` (ENTSO-E D+1 wind+solar forecast, gate-closure safe) |
+| Derived | `ren_pen` = wind_solar / load, `residual_load_mw` = load − wind_solar, `wind_solar_roll7d_mean` |
+
+All features respect the gate-closure constraint: the model only uses information available at noon D when predicting D+1 prices.
 
 ### Models
 
-**Baseline 1 — Seasonal Naive 168h** (`src/models/baseline.py`)  
+**Baseline 1 — Seasonal Naive 168h** (`src/models/baseline.py`)
 Predict next hour = same hour exactly 7 days ago. No fitting required; exploits the strong weekly seasonality in power prices.
 
-**Baseline 2 — Ridge Linear Regression** (`src/models/baseline.py`)  
-OLS with L2 penalty on calendar + lag + fundamental features. Captures linear relationships between fundamentals and price.
+**Baseline 2 — Ridge Linear Regression** (`src/models/baseline.py`)
+L2-penalised OLS on calendar + price lag + load features. Captures linear relationships; robust to collinear features.
 
-**Improved Model — LightGBM** (`src/models/forecasting.py`)  
-Gradient-boosted trees with engineered features. Key hyperparameters: 800 estimators, learning_rate=0.03, num_leaves=63, subsample=0.8. Single model with hour-of-day as an ordinal feature.
+**Improved Model — LightGBM** (`src/models/forecasting.py`)
+Gradient-boosted trees. Key hyperparameters: 800 estimators, learning_rate=0.03, num_leaves=63, subsample=0.8. Hour-of-day included as an ordinal feature, allowing the model to learn non-linear intraday price shapes.
 
-### Validation: Walk-Forward Expanding Window
+### Validation: Walk-Forward Expanding Window CV
 
 ```
-Timeline:  2022-01-01 ────────────── 2024-06-30 │ 2024-07-01 ──── 2024-12-31
-           <──── Training (walk-forward CV) ────> │ <──── Hold-out Test ────>
+Timeline:  2024-01-01 ──────────────────── 2026-02-26 │ 2026-02-26 ── 2026-05-27
+           <──── Walk-forward CV (expanding) ─────────> │ <──── Hold-out test ────>
 ```
 
-At each fold:
-1. Train on all data strictly before the prediction window (minimum 180 days)
-2. Predict 24h ahead (full next-day schedule)
-3. Advance 7 days; re-train
-
-This mirrors real gate-closure constraints: the model never sees future prices during training.
+At each fold: train on all data strictly before the window (minimum 180 days), predict 24h ahead, advance 7 days and re-train. This mirrors real gate-closure constraints with zero leakage.
 
 ### Performance Metrics
 
+**Walk-forward CV results (14,421 samples):**
+
 | Model | MAE (EUR/MWh) | RMSE (EUR/MWh) | Tail MAE P90 (EUR/MWh) |
 |---|---|---|---|
-| Seasonal Naive 168h | *reported at runtime* | *reported at runtime* | *reported at runtime* |
-| Ridge Linear | *reported at runtime* | *reported at runtime* | *reported at runtime* |
-| **LightGBM (CV)** | **see outputs/metrics_summary.json** | | |
-| LightGBM (test set) | *reported at runtime* | *reported at runtime* | *reported at runtime* |
+| **LightGBM (CV)** | **18.11** | **30.46** | **40.86** |
 
-> Exact numbers are populated by `pipeline.py` into `outputs/metrics_summary.json`. The LightGBM model consistently reduces MAE by ~20–35% vs. Seasonal Naive on German DA data (typical range: Naive ≈ 8–12 EUR/MWh → LightGBM ≈ 5–8 EUR/MWh, depending on the sample period).
+**Hold-out test set (2026-02-26 → 2026-05-27, 2,161 hours):**
 
-**Tail metric**: Mean absolute error on the top-10% of absolute price observations (P90 gate). This is the most trading-relevant metric because fat-tail price events drive P&L.
+| Model | MAE (EUR/MWh) | RMSE (EUR/MWh) | Tail MAE P90 (EUR/MWh) |
+|---|---|---|---|
+| Seasonal Naive 168h | 44.84 | 67.00 | 70.65 |
+| Ridge Linear | 33.04 | 47.50 | 58.47 |
+| **LightGBM** | **23.08** | **35.02** | **45.01** |
+
+LightGBM beats Seasonal Naive by **−48.5% MAE** and Ridge by **−30.1% MAE** on the hold-out set. Adding the wind+solar day-ahead generation forecast as a third fundamental driver was the single largest driver of accuracy improvement (MAE dropped from 32.5 → 23.1 EUR/MWh versus the load-only model). The tail metric (P90 gate) is the most trading-relevant: fat-tail price events drive P&L.
 
 ---
 
@@ -114,16 +117,16 @@ This mirrors real gate-closure constraints: the model never sees future prices d
 
 The pipeline implements a three-step translation in `src/trading/curve_translation.py`:
 
-**Step 1 — Delivery-period aggregation**  
+**Step 1 — Delivery-period aggregation**
 Hourly forecasts are resampled to base/peak/off-peak averages for day, week, and month delivery:
 - Base = all 24 hours
-- Peak = hours 8–19 (CET local time, HE08–HE19)
+- Peak = hours 8–19 CET (HE08–HE19)
 - Off-peak = hours 0–7, 20–23
 
-**Step 2 — Distribution bands**  
-For each delivery day, the P10/P90 quantile range across forecast hours gives an uncertainty band. Wide bands = high intraday price spread = shape risk.
+**Step 2 — Distribution bands**
+P10/P90 quantile range across forecast hours gives an uncertainty band per delivery day. Wide bands = high intraday spread = shape risk.
 
-**Step 3 — Signal Z-score**  
+**Step 3 — Signal Z-score**
 ```
 signal_z = (forecast_base_avg − 30d_rolling_mean) / 30d_rolling_std
 ```
@@ -131,97 +134,95 @@ signal_z = (forecast_base_avg − 30d_rolling_mean) / 30d_rolling_std
 - `signal_z < −0.5` → **SHORT** (forecast below recent norm)
 - Otherwise → **FLAT**
 
+**Live example (2026-05-27):** forecast base = 69.45 EUR/MWh vs. 30d benchmark = 95.37 EUR/MWh → Z = −0.88 → **SHORT**
+
 ### What the Desk Does With It
 
 | Horizon | Instrument | Trigger |
 |---|---|---|
 | D+1 | EPEX Spot block order | Signal at gate-closure (noon D) |
-| Week+1 | EEX Week baseload | Forecast weekly base > ICE midprice + 2 EUR/MWh |
+| Week+1 | EEX Week baseload | Forecast weekly base vs. ICE midprice + 2 EUR/MWh threshold |
 | Month+1 | ICE EEX front month | Forecast monthly base outside bid-offer + 2 EUR/MWh |
 
-The forecast also informs **shape positioning**: a wide peak/base spread in the forecast suggests buying peak and selling base (or via load-following instruments).
+A wide peak/base spread in the forecast suggests shape positioning (buy peak, sell base).
 
 ### What Would Invalidate the Signal
 
-1. **Fundamental surprise**: unplanned large outage (nuclear unit, major interconnector) detected in ENTSO-E Transparency feed real-time updates
-2. **Model degradation**: live MAE exceeds 2× backtested average → regime-change flag → suspend signal
-3. **Fat-tail event**: P90−P10 > 40 EUR/MWh on a single forecast day → halve position size
-4. **Illiquidity**: prompt-month bid-ask > 1 EUR/MWh → signal not executable at model price
-5. **Gas spike**: TTF Day-Ahead > 3× 30d rolling average (German merit order shift not captured in VRE-only fundamentals)
+1. **Fundamental surprise** — unplanned large outage (nuclear unit, major interconnector) not yet reflected in TSO Transparency data
+2. **Model degradation** — live MAE exceeds 2× backtested average → suspend signal, flag regime change
+3. **Fat-tail alert** — P90−P10 > 40 EUR/MWh on a single forecast day → halve position size
+4. **Illiquidity** — prompt-month bid-ask > 1 EUR/MWh → signal not executable at model price
+5. **Gas spike** — TTF Day-Ahead > 3× 30d rolling average → German merit order shifts in ways not captured by load-only fundamentals
 
 ---
 
 ## 4. AI-Accelerated Workflow
 
-Two **programmatic** LLM features are implemented in `src/ai/llm_component.py`, both using the Anthropic Claude API (`claude-sonnet-4-6`).
+Two **programmatic** LLM features are implemented in `src/ai/llm_component.py`, both using the **Groq API** (free tier, no billing required).
 
 ### Feature A: LLM-Driven Data QA Rules
+
+**Model**: `llama-3.1-8b-instant` (Groq free tier, ~1s latency)
 
 **Problem it solves**: Writing per-column validation rules for a new data schema is tedious and error-prone. An LLM can propose physically-motivated rules from schema + summary statistics automatically.
 
 **How it works**:
-1. The pipeline extracts: column names/dtypes, descriptive statistics (`df.describe()`), and 5 sample rows
-2. These are passed to Claude with a structured prompt requesting a JSON array of validation rules
-3. The pipeline `eval()`s each rule's `condition` expression against the DataFrame and reports pass/fail counts
-4. Result is merged into the QA report JSON
+1. The pipeline extracts column names/dtypes, descriptive statistics (`df.describe()`), and 5 sample rows
+2. These are passed to the LLM with a structured prompt requesting a JSON array of validation rules
+3. Each rule's `condition` expression is evaluated against the DataFrame and pass/fail counts are reported
+4. Results are merged into the QA report JSON
 
-**Sample output (illustrative)**:
+**Sample output from actual run (`outputs/logs/llm_qa_rules_*.json`):**
 ```json
 [
-  {"field": "da_price", "rule": "Price within ENTSO-E physical limit", 
-   "condition": "df['da_price'].between(-500, 4000)", "severity": "error"},
-  {"field": "load_mw", "rule": "Load above minimum viable German system load",
-   "condition": "df['load_mw'].ge(15000) | df['load_mw'].isna()", "severity": "error"},
-  {"field": "solar_mw", "rule": "Solar is non-negative",
-   "condition": "df['solar_mw'].ge(0) | df['solar_mw'].isna()", "severity": "error"},
-  {"field": "wind_total_mw", "rule": "Wind does not implausibly exceed load",
-   "condition": "(df['wind_total_mw'] <= df['load_mw'] * 1.5) | df['wind_total_mw'].isna()", 
-   "severity": "warning"}
+  {"field": "da_price",        "rule": "Non-negative DA price",           "condition": "df['da_price'] >= 0",        "severity": "error"},
+  {"field": "load_mw",         "rule": "Non-negative load",               "condition": "df['load_mw'] >= 0",         "severity": "error"},
+  {"field": "load_forecast_mw","rule": "Non-negative load forecast",      "condition": "df['load_forecast_mw'] >= 0","severity": "error"}
 ]
 ```
 
-**Productivity gain**: Writing 8–15 column-specific rules manually takes ~30 minutes; the LLM produces them in ~5 seconds. A human reviews and optionally adds to the JSON.
+**Productivity gain**: Writing 8–15 column-specific rules manually takes ~30 minutes; the LLM produces them in ~1 second.
 
 ### Feature B: Automated Daily Market Commentary
 
-**Problem it solves**: Traders read a morning note every day. Manually writing it from model outputs requires copying numbers, calculating spreads, and drafting prose — ~15–20 minutes.
+**Model**: `llama-3.3-70b-versatile` (Groq free tier)
+
+**Problem it solves**: Writing a daily morning note from model outputs requires copying numbers, calculating spreads, and drafting prose — ~15–20 minutes per day.
 
 **How it works**:
-1. After forecasting, `build_commentary_metrics()` assembles a dict of computed values: base/peak/off-peak forecast, WoW change, wind/solar penetration, residual load, rolling price history
-2. These numbers — and only these numbers — are passed to Claude via a structured prompt
-3. The prompt explicitly forbids invented numbers and instructs the model to close with a directional view on the prompt month
-4. The result is logged (prompt + response + token usage) and saved to `outputs/logs/commentary_YYYY-MM-DD.txt`
+1. `build_commentary_metrics()` assembles a dict of computed values: base/peak/off-peak forecast, WoW change, load, rolling price history
+2. Only these computed values — no invented numbers — are passed to the LLM via a structured prompt
+3. The LLM generates a 3–4 sentence note and closes with a directional view on the prompt month
+4. Full prompt + response + token usage are logged to `outputs/logs/llm_daily_commentary_*.json`
 
-**Failure modes & handling**:
-- Missing API key → `ValueError` caught, returns bracketed fallback string
+**Sample output from actual run:**
+> "The day-ahead market is expected to be characterised by a base average price of 70.35 EUR/MWh, with a notable week-over-week decrease of 57.61 EUR/MWh (−45.0%). The peak and off-peak averages reflect a wide intraday spread, with the 7-day and 30-day rolling averages at 98.01 EUR/MWh suggesting that current forecast levels are meaningfully below recent norms."
+
+**Failure modes handled**:
+- Missing API key → `ValueError` caught, returns bracketed fallback string; pipeline continues
 - JSON parse failure (QA rules) → logged as `qa_rules_parse_error`, returns empty list
-- API timeout → caught, logged, pipeline continues without AI step
+- Any API exception → caught, logged with full traceback, pipeline continues without AI step
 
-**Audit trail**: Every LLM call writes a JSON log to `outputs/logs/llm_<tag>_<epoch>.json` containing the full prompt, raw response, model name, latency, and token usage. This makes the AI outputs fully auditable and reproducible for any given input state.
+**Audit trail**: Every LLM call writes a JSON log to `outputs/logs/llm_<tag>_<epoch>.json` containing full prompt, raw response, model name, latency, and token usage.
 
 ### Security: No Secrets in Code
 
 ```bash
-# All credentials via environment variables only
-export ENTSOE_API_KEY=...
-export ANTHROPIC_API_KEY=...
+export GROQ_API_KEY=your_key_here   # free at console.groq.com
+# export ENTSOE_API_KEY=...         # optional — not needed when local CSVs present
 ```
 
-The `.env.example` file documents required variables; `.env` is gitignored.
-
----
-
-## Figures
-
-| File | Description |
-|---|---|
-| `outputs/figures/01_raw_series.png` | DA price, renewable generation, and load time series |
-| `outputs/figures/02_forecast_vs_actual.png` | LightGBM vs. actual vs. seasonal naive (validation tail) |
-| `outputs/figures/03_feature_importance.png` | LightGBM feature importances (gain) |
-| `outputs/figures/04_delivery_curve.png` | Monthly base/peak forecast with P10-P90 band |
+`.env.example` documents all required variables. `.env` is gitignored.
 
 ---
 
 ## Reproducibility
 
-See `README.md` for setup and run instructions. The full pipeline is orchestrated by `pipeline.py` with a single command. All random seeds are fixed (`random_state=42`). Data is cached to Parquet so the pipeline can run offline after the initial download.
+See `README.md` for full setup and run instructions. The pipeline is orchestrated by a single CLI command:
+
+```bash
+python pipeline.py --no-llm   # fast run without LLM calls
+python pipeline.py            # full run with QA rules + commentary
+```
+
+All random seeds are fixed (`random_state=42`). Data is cached to Parquet after first load so the pipeline runs offline. The backend (FastAPI) and frontend (React + Vite) are independently runnable.

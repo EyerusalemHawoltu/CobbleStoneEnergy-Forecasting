@@ -45,6 +45,11 @@ def _local_load_files_exist(start: pd.Timestamp, end: pd.Timestamp) -> bool:
     return all((CACHE_DIR / f"load{y}.csv").exists() for y in years)
 
 
+def _local_wind_solar_files_exist(start: pd.Timestamp, end: pd.Timestamp) -> bool:
+    years = range(start.year, end.year + 1)
+    return all((CACHE_DIR / f"wind_solar{y}.csv").exists() for y in years)
+
+
 def detect_local_data_end() -> Optional[pd.Timestamp]:
     """
     Return the latest timestamp available across local price CSV files.
@@ -146,17 +151,72 @@ def _load_local_load_csvs(
     return result
 
 
+def _load_local_wind_solar_csvs(
+    start: pd.Timestamp, end: pd.Timestamp
+) -> pd.DataFrame:
+    """
+    Read manually downloaded ENTSO-E wind+solar onshore generation forecasts.
+    Files: wind_solar{YYYY}.csv — 15-min CET/CEST timestamps.
+
+    Returns DataFrame with columns:
+      wind_solar_da_mw     — day-ahead generation forecast (gate-closure safe)
+      wind_solar_actual_mw — actual measured generation (for lagged features)
+    """
+    years = range(start.year, end.year + 1)
+    dfs = []
+    for year in years:
+        p = CACHE_DIR / f"wind_solar{year}.csv"
+        if not p.exists():
+            logger.warning(f"Local wind/solar file missing: {p}")
+            continue
+        df = pd.read_csv(p)
+        # Timestamps are in CET/CEST local time — convert to UTC
+        raw_ts = df["MTU (CET/CEST)"].str.split(" - ").str[0]
+        try:
+            df["timestamp"] = (
+                pd.to_datetime(raw_ts, format="%d/%m/%Y %H:%M:%S")
+                .dt.tz_localize("Europe/Berlin", ambiguous="infer", nonexistent="shift_forward")
+                .dt.tz_convert("UTC")
+            )
+        except Exception:
+            df["timestamp"] = (
+                pd.to_datetime(raw_ts, format="%d/%m/%Y %H:%M:%S", errors="coerce")
+                .dt.tz_localize("Europe/Berlin", ambiguous="NaT", nonexistent="NaT")
+                .dt.tz_convert("UTC")
+            )
+        df["wind_solar_da_mw"] = pd.to_numeric(
+            df["Day-ahead (MW)"].replace("-", float("nan")).replace(" ", float("nan")),
+            errors="coerce",
+        )
+        df["wind_solar_actual_mw"] = pd.to_numeric(
+            df["Actual (MW)"].replace("-", float("nan")).replace(" ", float("nan")),
+            errors="coerce",
+        )
+        dfs.append(df[["timestamp", "wind_solar_da_mw", "wind_solar_actual_mw"]])
+        logger.info(f"Loaded wind/solar file: {p.name} ({len(df):,} rows)")
+
+    if not dfs:
+        return pd.DataFrame(columns=["wind_solar_da_mw", "wind_solar_actual_mw"])
+
+    combined = pd.concat(dfs).set_index("timestamp")
+    combined = combined[~combined.index.duplicated(keep="first")].sort_index()
+    combined["wind_solar_da_mw"] = combined["wind_solar_da_mw"].interpolate(limit=4)
+    combined["wind_solar_actual_mw"] = combined["wind_solar_actual_mw"].interpolate(limit=4)
+    result = combined.resample("h").mean()
+    result = result.loc[start:end]
+    return result
+
+
 def load_local_data(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     """
     Build the merged hourly dataset from manually downloaded CSVs.
 
     Returns a DataFrame indexed by utc_timestamp with columns:
-      da_price         — hourly DA price (EUR/MWh); NaN for truly future hours
-      load_mw          — actual load where available; filled from load_forecast_mw
-                         for future hours so feature construction works
-      load_forecast_mw — DA load forecast (available through end of year)
-
-    Wind and solar columns are absent; feature engineering handles this gracefully.
+      da_price             — hourly DA price (EUR/MWh)
+      load_mw              — actual load; filled from load_forecast_mw for future hours
+      load_forecast_mw     — TSO day-ahead load forecast
+      wind_solar_da_mw     — ENTSO-E wind+solar onshore DA generation forecast (if available)
+      wind_solar_actual_mw — actual wind+solar onshore generation (if available)
     """
     logger.info("Loading data from local CSV files (no ENTSO-E API key required)")
     prices = _load_local_price_csvs(start, end)
@@ -169,6 +229,17 @@ def load_local_data(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     })
     df.index.name = "utc_timestamp"
     df = df.loc[start:end]
+
+    # Merge wind+solar if files exist
+    if _local_wind_solar_files_exist(start, end):
+        ws_df = _load_local_wind_solar_csvs(start, end)
+        df["wind_solar_da_mw"] = ws_df.get("wind_solar_da_mw")
+        df["wind_solar_actual_mw"] = ws_df.get("wind_solar_actual_mw")
+        n_ws_null = df["wind_solar_da_mw"].isna().sum()
+        if n_ws_null:
+            logger.warning(f"wind_solar_da_mw has {n_ws_null} NaN rows — forward-filling")
+            df["wind_solar_da_mw"] = df["wind_solar_da_mw"].ffill(limit=4)
+            df["wind_solar_actual_mw"] = df["wind_solar_actual_mw"].ffill(limit=4)
 
     # For future rows where actual load is missing/zero, use the DA load forecast
     if "load_forecast_mw" in df.columns:
@@ -184,10 +255,13 @@ def load_local_data(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         logger.warning(f"Load has {n_load_null} NaN rows — forward-filling ≤4h gaps")
         df["load_mw"] = df["load_mw"].ffill(limit=4)
 
+    ws_col = "wind_solar_da_mw" if "wind_solar_da_mw" in df.columns else None
     logger.info(
         f"Local dataset: {len(df):,} hourly rows  "
         f"({df.index.min().date()} → {df.index.max().date()})  "
-        f"da_price NaN={df['da_price'].isna().sum()}  load NaN={df['load_mw'].isna().sum()}"
+        f"da_price NaN={df['da_price'].isna().sum()}  "
+        f"load NaN={df['load_mw'].isna().sum()}  "
+        f"wind_solar={'yes' if ws_col else 'absent'}"
     )
     return df
 

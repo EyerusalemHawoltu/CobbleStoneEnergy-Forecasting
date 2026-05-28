@@ -103,7 +103,7 @@ export default function App() {
               activeTab === "metrics" ? <MetricsPanel /> : <QAPanel />
             ) : (
               <div style={{ color: "var(--muted)", fontSize: 12, padding: "20px 0", textAlign: "center" }}>
-                {ready === false ? "Pipeline initialising… (this takes ~30s)" : "Connecting to backend…"}
+                {ready === false ? "Pipeline initialising… (this takes ~7 min on first run)" : "Connecting to backend…"}
               </div>
             )}
           </div>
