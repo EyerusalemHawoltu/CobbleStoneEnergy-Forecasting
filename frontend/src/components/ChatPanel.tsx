@@ -13,8 +13,8 @@ interface Message {
 
 const SUGGESTIONS = [
   "What's the forecast for tomorrow?",
-  "Next week base/peak/offpeak prices",
-  "Next month base/peak/offpeak prices",
+  "Next week predictions",
+  "Next month predictions",
   "Show me the monthly delivery curve",
   "How accurate is the LightGBM model?",
   "What's the current trading signal?",
