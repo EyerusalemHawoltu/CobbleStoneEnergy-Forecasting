@@ -15,7 +15,7 @@ const SUGGESTIONS = [
   "What's the forecast for tomorrow?",
   "Next week predictions",
   "Next month predictions",
-  "Show me the monthly delivery curve",
+  "Show me the forward curve",
   "How accurate is the LightGBM model?",
   "What's the current trading signal?",
   "Run data quality checks",
