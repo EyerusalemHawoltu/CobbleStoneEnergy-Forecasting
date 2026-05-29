@@ -13,6 +13,7 @@ interface Message {
 
 const SUGGESTIONS = [
   "What's the forecast for tomorrow?",
+  "Show me the forward curve",
   "Show me the monthly delivery curve",
   "How accurate is the LightGBM model?",
   "What's the current trading signal?",

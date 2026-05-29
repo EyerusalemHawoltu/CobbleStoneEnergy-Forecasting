@@ -124,6 +124,7 @@ Open http://localhost:5173. The UI polls `/api/health` every 2 seconds and unloc
 
 ```
 "What's the forecast for tomorrow?"
+"Show me the forward curve"
 "Show me the monthly delivery curve"
 "How accurate is the LightGBM model?"
 "What's the current trading signal?"
@@ -131,6 +132,8 @@ Open http://localhost:5173. The UI polls `/api/health` every 2 seconds and unloc
 ```
 
 The Groq agent (Llama 3.3 70B) interprets the question, calls the appropriate pipeline tool, and returns a natural-language answer. Charts update automatically when forecast or delivery data is returned.
+
+The **"Show me the forward curve"** button (and the **Forward Curve** tab in the sidebar) calls `get_forward_delivery` — it runs the LightGBM model over every day of next week and next month, then aggregates to base / peak / off-peak averages. This is the prompt-curve view derived from the forecast distribution as required by the case study.
 
 ---
 

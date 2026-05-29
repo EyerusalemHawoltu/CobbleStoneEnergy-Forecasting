@@ -18,7 +18,6 @@ I chose **Germany (DE)** — the largest and most liquid European power market, 
 | Day-Ahead Load Forecast | A65 | `processType=A01`, `outBiddingZone_Domain=10Y1001A1001A63L` | 15-min → resampled 1h |
 | Wind+Solar Onshore Gen Forecast | A69 | `processType=A01`, `psrType=B18+B16`, `outBiddingZone_Domain=10Y1001A1001A63L` | 15-min → resampled 1h |
 
-**Full API documentation**: https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html
 
 Data was manually exported from ENTSO-E Transparency and loaded from local CSV files (`data/raw/energyprice{YYYY}.csv`, `data/raw/load{YYYY}.csv`). The pipeline also supports direct ENTSO-E API ingestion via `entsoe-py` when `ENTSOE_API_KEY` is set. Coverage: **2024-01-01 → 2026-05-27** (21,070 hourly rows).
 
@@ -117,11 +116,13 @@ LightGBM beats Seasonal Naive by **−48.5% MAE** and Ridge by **−30.1% MAE** 
 
 The pipeline implements a three-step translation in `src/trading/curve_translation.py`:
 
-**Step 1 — Delivery-period aggregation**
-Hourly forecasts are resampled to base/peak/off-peak averages for day, week, and month delivery:
-- Base = all 24 hours
-- Peak = hours 8–19 CET (HE08–HE19)
-- Off-peak = hours 0–7, 20–23
+**Step 1 — Forward delivery aggregation (next-week / next-month)**
+To derive prompt-curve views from the forecast distribution, the pipeline runs the LightGBM model forward over every day of next week (Mon–Sun) and next month, then aggregates hourly forecasts to delivery-period averages (`backend/services/pipeline_service.py: get_forward_delivery()`):
+- Base = mean of all 24 forecast hours
+- Peak = mean of hours 8–19 CET (HE08–HE19)
+- Off-peak = mean of hours 0–7, 20–23
+
+These forward averages are displayed in the **"Forward Curve"** tab of the UI and accessible via the **"Show me the forward curve"** chat button and the `/api/forecast/forward-delivery` endpoint. This directly satisfies the case-study requirement to derive next-week / next-month expected averages from the forecast distribution.
 
 **Step 2 — Distribution bands**
 P10/P90 quantile range across forecast hours gives an uncertainty band per delivery day. Wide bands = high intraday spread = shape risk.

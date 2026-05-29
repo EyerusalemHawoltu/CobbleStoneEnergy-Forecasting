@@ -125,6 +125,19 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_forward_delivery",
+            "description": (
+                "Get forward-looking next-week and next-month delivery averages "
+                "(base, peak, off-peak in EUR/MWh) derived by running the DA forecast "
+                "model over each future day. Use this when the user asks about the prompt "
+                "curve, next week, next month, or forward delivery prices."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "generate_commentary",
             "description": (
                 "Generate an AI market commentary for a date, using only computed pipeline "
@@ -157,6 +170,8 @@ def _execute_tool(name: str, args: dict, pipeline) -> Any:
         return pipeline.get_qa_summary()
     if name == "get_trading_signal":
         return pipeline.get_trading_signal(args.get("date"))
+    if name == "get_forward_delivery":
+        return pipeline.get_forward_delivery()
     if name == "generate_commentary":
         return pipeline.generate_commentary(args.get("date"))
     return {"error": f"Unknown tool: {name}"}
@@ -362,7 +377,7 @@ def chat(
         if "rate_limit" in exc_str or "rate limit" in exc_str or "429" in exc_str or "too many" in exc_str:
             msg = "⏳ Groq rate limit reached (free tier). Please wait ~1 minute and try again."
         else:
-            msg = "Something went wrong. Please try again."
+            msg = f"Error: {type(exc).__name__}: {exc}"
         return {
             "response": msg,
             "tool_calls": tool_results,

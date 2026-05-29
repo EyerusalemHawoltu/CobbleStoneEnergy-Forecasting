@@ -44,6 +44,11 @@ export default function App() {
       setChart({ type: "hourly", data: data.hourly as unknown[], title: `Hourly Forecast — ${data.date}` });
     } else if (type === "get_delivery_summary" && data.data) {
       setChart({ type: "delivery", data: data.data as unknown[], title: `${(data.period_type as string)} Delivery Curve` });
+    } else if (type === "get_forward_delivery") {
+      const rows = [];
+      if (data.next_week) rows.push({ period: "Next Week", ...(data.next_week as Record<string, unknown>) });
+      if (data.next_month) rows.push({ period: "Next Month", ...(data.next_month as Record<string, unknown>) });
+      if (rows.length) setChart({ type: "delivery", data: rows, title: "Forward Delivery Curve — Next Week & Next Month" });
     }
   };
 
