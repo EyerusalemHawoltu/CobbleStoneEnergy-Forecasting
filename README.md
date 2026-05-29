@@ -188,8 +188,7 @@ All features are gate-closure safe: only information available at noon D is used
 
 ## Data Sources
 
-Base URL: `https://web-api.tp.entsoe.eu/api`  
-Full API guide: https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html
+Base URL: `https://transparency.entsoe.eu/`  
 
 | Dataset | documentType | Parameters |
 |---|---|---|
