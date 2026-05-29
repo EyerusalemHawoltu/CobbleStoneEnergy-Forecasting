@@ -39,6 +39,10 @@ and off-peak averages and their trading implications.
 
 When the user asks about next week or next month prices, base/peak/offpeak, \
 or forward delivery, always call get_forward_delivery — never invent numbers.
+
+IMPORTANT — for get_forward_delivery results: report the PERIOD AVERAGES only \
+(base_avg, peak_avg, offpeak_avg for next week and next month). Do NOT list \
+individual daily rows — the chart already shows that detail.
 """
 
 TOOLS = [
@@ -313,7 +317,7 @@ def chat(
             response2 = client.chat.completions.create(
                 model=AGENT_MODEL,
                 messages=messages,
-                max_tokens=1024,
+                max_tokens=2048,
                 temperature=0.2,
             )
             final_text = _strip_function_syntax(response2.choices[0].message.content or "")
