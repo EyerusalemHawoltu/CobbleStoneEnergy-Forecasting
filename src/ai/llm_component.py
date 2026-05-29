@@ -94,9 +94,11 @@ Return ONLY a valid JSON array with NO markdown fences, no explanation.
 Each element must be an object with exactly these keys:
   "field"     : column name the rule applies to (string)
   "rule"      : short human-readable description (string)
-  "condition" : a Python expression that evaluates to a boolean Series using \
-'df' as the DataFrame variable. Use pandas methods only.
-  "severity"  : "error" or "warning"
+  "condition" : a pandas expression using 'df' that returns a **boolean Series** \
+(one True/False per row). CRITICAL: do NOT use .all(), .any(), or any other \
+aggregation — the result MUST be a Series with len(df) elements, e.g. \
+"df['da_price'].between(-500, 4000)" or "(df['load_mw'] >= 15000) & (df['load_mw'] <= 90000)".
+  "severity"  : always use "warning"
 
 Focus on physical plausibility and range checks only. Do NOT invent cross-column \
 arithmetic identities.

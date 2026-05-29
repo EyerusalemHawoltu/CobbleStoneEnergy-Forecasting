@@ -64,10 +64,10 @@ export default function QAPanel() {
               {r.passed === true ? (
                 <ShieldCheck size={12} color="var(--accent2)" style={{ flexShrink: 0, marginTop: 1 }} />
               ) : (
-                <ShieldAlert size={12} color={r.severity === "error" ? "var(--danger)" : "var(--warn)"} style={{ flexShrink: 0, marginTop: 1 }} />
+                <ShieldAlert size={12} color="var(--warn)" style={{ flexShrink: 0, marginTop: 1 }} />
               )}
               <div style={{ flex: 1 }}>
-                <span style={{ fontSize: 11, color: r.passed ? "var(--text)" : r.severity === "error" ? "var(--danger)" : "var(--warn)" }}>
+                <span style={{ fontSize: 11, color: r.passed ? "var(--text)" : "var(--warn)" }}>
                   {r.field}: {r.rule}
                 </span>
                 {r.n_fail > 0 && (
