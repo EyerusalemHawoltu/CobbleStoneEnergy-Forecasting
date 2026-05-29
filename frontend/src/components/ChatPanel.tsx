@@ -129,12 +129,12 @@ export default function ChatPanel({ onDataReceived }: Props) {
 
       {/* Suggestions — always visible */}
       {!loading && (
-        <div style={{ padding: "0 16px 12px", display: "flex", flexWrap: "wrap", gap: 6 }}>
+        <div className="suggestions-row">
           {SUGGESTIONS.map((s) => (
             <button key={s} onClick={() => send(s)} style={{
               background: "var(--surface2)", border: "1px solid var(--border)",
               color: "var(--muted)", borderRadius: 20, padding: "5px 12px",
-              fontSize: 12, cursor: "pointer", transition: "all 0.15s",
+              fontSize: 12, cursor: "pointer", transition: "all 0.15s", flexShrink: 0,
             }}
               onMouseEnter={(e) => { (e.target as HTMLElement).style.color = "var(--text)"; (e.target as HTMLElement).style.borderColor = "var(--accent)"; }}
               onMouseLeave={(e) => { (e.target as HTMLElement).style.color = "var(--muted)"; (e.target as HTMLElement).style.borderColor = "var(--border)"; }}

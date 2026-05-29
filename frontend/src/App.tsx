@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Activity, BarChart2, ShieldCheck, TrendingUp } from "lucide-react";
+import { Activity, BarChart2, MessageCircle, ShieldCheck, TrendingUp } from "lucide-react";
 import ChatPanel from "./components/ChatPanel";
 import ForecastChart from "./components/ForecastChart";
 import MetricsPanel from "./components/MetricsPanel";
@@ -21,6 +21,7 @@ export default function App() {
   const [ready, setReady] = useState<boolean | null>(null);
   const [demoMode, setDemoMode] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("metrics");
+  const [mobilePanel, setMobilePanel] = useState<"chat" | Tab>("chat");
   const [chart, setChart] = useState<ChartState | null>(null);
 
   useEffect(() => {
@@ -61,7 +62,7 @@ export default function App() {
         flexShrink: 0,
       }}>
         <Activity size={18} color="var(--accent)" />
-        <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: "-0.02em" }}>
+        <span className="header-title" style={{ fontWeight: 700, fontSize: 15, letterSpacing: "-0.02em" }}>
           Cobblestone Energy — DE Power Forecast
         </span>
         <span className="badge badge-blue" style={{ marginLeft: 4 }}>Groq Free</span>
@@ -76,9 +77,9 @@ export default function App() {
       {/* Main layout */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* Left sidebar — data panels */}
-        <aside style={{
+        <aside className={`app-sidebar${mobilePanel !== "chat" ? " mobile-visible" : ""}`} style={{
           width: 320, flexShrink: 0, background: "var(--surface)",
-          borderRight: "1px solid var(--border)", display: "flex",
+          borderRight: "1px solid var(--border)",
           flexDirection: "column", overflow: "hidden",
         }}>
           {/* Signal */}
@@ -89,7 +90,7 @@ export default function App() {
           {/* Tabs */}
           <div style={{ display: "flex", borderBottom: "1px solid var(--border)" }}>
             {([["metrics", BarChart2, "Performance"], ["delivery", TrendingUp, "Forward Curve"], ["qa", ShieldCheck, "Data QA"]] as const).map(([tab, Icon, label]) => (
-              <button key={tab} onClick={() => setActiveTab(tab)} style={{
+              <button key={tab} onClick={() => { setActiveTab(tab); setMobilePanel(tab); }} style={{
                 flex: 1, background: "none", border: "none", padding: "10px 0",
                 cursor: "pointer", fontSize: 12, fontWeight: 500,
                 color: activeTab === tab ? "var(--accent)" : "var(--muted)",
@@ -116,7 +117,7 @@ export default function App() {
         </aside>
 
         {/* Centre — chat + charts */}
-        <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <main className={`app-main${mobilePanel !== "chat" ? " panel-open" : ""}`} style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Chart area */}
           {chart && (
             <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
@@ -130,6 +131,25 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      {/* Bottom nav — visible on mobile only (CSS hides it on desktop) */}
+      <nav className="bottom-nav">
+        {([
+          ["chat",     MessageCircle, "Chat"],
+          ["metrics",  BarChart2,     "Performance"],
+          ["delivery", TrendingUp,    "Curve"],
+          ["qa",       ShieldCheck,   "QA"],
+        ] as const).map(([panel, Icon, label]) => (
+          <button
+            key={panel}
+            className={`bottom-nav-btn${mobilePanel === panel ? " active" : ""}`}
+            onClick={() => { setMobilePanel(panel); if (panel !== "chat") setActiveTab(panel); }}
+          >
+            <Icon size={20} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

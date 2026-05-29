@@ -42,3 +42,66 @@ body {
 .badge-red    { background: rgba(239,68,68,0.15);  color: var(--danger); }
 .badge-yellow { background: rgba(245,158,11,0.15); color: var(--warn); }
 .badge-blue   { background: rgba(79,142,247,0.15); color: var(--accent); }
+
+/* ── Responsive layout helpers ─────────────────────────── */
+/* Desktop defaults (used via className — no inline display needed on sidebar) */
+.app-sidebar { display: flex; flex-direction: column; overflow: hidden; }
+.bottom-nav  { display: none; }
+
+/* Suggestion chips row */
+.suggestions-row {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 0 16px 12px;
+}
+
+/* ── Mobile breakpoint ──────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Sidebar: hidden by default; fixed overlay when a panel tab is active */
+  .app-sidebar {
+    display: none !important;
+    position: fixed !important;
+    top: 52px !important; left: 0 !important;
+    right: 0 !important; bottom: 58px !important;
+    width: 100% !important; z-index: 100 !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+  .app-sidebar.mobile-visible { display: flex !important; }
+
+  /* Hide the chat column when a sidebar panel is in front */
+  .app-main.panel-open { display: none !important; }
+
+  /* Bottom navigation bar */
+  .bottom-nav {
+    display: flex; height: 58px; flex-shrink: 0;
+    background: var(--surface); border-top: 1px solid var(--border);
+  }
+  .bottom-nav-btn {
+    flex: 1; background: none; border: none; cursor: pointer;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 3px; color: var(--muted);
+    font-size: 10px; font-weight: 500;
+    padding: 4px 2px; min-height: 44px;
+    transition: color 0.15s;
+  }
+  .bottom-nav-btn.active { color: var(--accent); }
+
+  /* Suggestions scroll horizontally instead of wrapping */
+  .suggestions-row {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    padding-bottom: 6px !important;
+    scrollbar-width: thin;
+  }
+  .suggestions-row::-webkit-scrollbar { height: 3px; }
+
+  /* Header: tighten padding, truncate long title */
+  .header-title {
+    font-size: 13px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 160px;
+  }
+}
