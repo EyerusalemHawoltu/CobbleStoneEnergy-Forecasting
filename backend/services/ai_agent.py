@@ -36,6 +36,9 @@ always call the appropriate tool first — never invent numbers.
 After calling a tool, interpret the results clearly for a power trading desk. \
 Be concise and trading-relevant. When you have forecast data, mention base, peak, \
 and off-peak averages and their trading implications.
+
+When the user asks about next week or next month prices, base/peak/offpeak, \
+or forward delivery, always call get_forward_delivery — never invent numbers.
 """
 
 TOOLS = [
