@@ -358,6 +358,69 @@ class PipelineService:
             })
         return {"period_type": period, "data": records}
 
+    def get_forward_delivery(self) -> dict:
+        """
+        Forward-looking next-week and next-month delivery averages.
+        Runs the DA forecast model over each future day and aggregates to
+        base / peak / off-peak averages — satisfying the case-study requirement
+        of deriving prompt-curve views from the forecast distribution.
+        """
+        self._check_ready()
+        import calendar
+        from datetime import date, timedelta
+
+        today = date.today()
+
+        # Next week: Monday–Sunday of the coming calendar week
+        days_until_monday = (7 - today.weekday()) % 7 or 7
+        next_monday = today + timedelta(days=days_until_monday)
+        next_week_dates = [next_monday + timedelta(days=i) for i in range(7)]
+
+        # Next month: every day in the next calendar month
+        nm_year = today.year + (1 if today.month == 12 else 0)
+        nm_month = 1 if today.month == 12 else today.month + 1
+        days_in_nm = calendar.monthrange(nm_year, nm_month)[1]
+        next_month_start = date(nm_year, nm_month, 1)
+        next_month_dates = [next_month_start + timedelta(days=i) for i in range(days_in_nm)]
+
+        output = {}
+        for label, dates in [("next_week", next_week_dates), ("next_month", next_month_dates)]:
+            all_px, peak_px, op_px, daily = [], [], [], []
+            for d in dates:
+                try:
+                    fc = self.get_daily_forecast(d.isoformat())
+                    if "error" in fc:
+                        continue
+                    for h in fc.get("hourly", []):
+                        p = h.get("forecast")
+                        if p is None:
+                            continue
+                        all_px.append(p)
+                        (peak_px if h.get("is_peak") else op_px).append(p)
+                    daily.append({
+                        "date": d.isoformat(),
+                        "base_avg": fc["summary"]["base_avg"],
+                        "peak_avg": fc["summary"]["peak_avg"],
+                        "offpeak_avg": fc["summary"]["offpeak_avg"],
+                    })
+                except Exception as exc:
+                    logger.warning(f"Forward delivery: skipping {d}: {exc}")
+
+            def _avg(lst):
+                return round(sum(lst) / len(lst), 2) if lst else None
+
+            output[label] = {
+                "label": "Next Week" if label == "next_week" else "Next Month",
+                "period": f"{dates[0].isoformat()} → {dates[-1].isoformat()}",
+                "base_avg": _avg(all_px),
+                "peak_avg": _avg(peak_px),
+                "offpeak_avg": _avg(op_px),
+                "n_days": len(daily),
+                "daily": daily,
+            }
+
+        return output
+
     def get_model_metrics(self) -> dict:
         self._check_ready()
         return self.metrics

@@ -30,6 +30,14 @@ def delivery_summary(period: str = "monthly"):
     return pipeline.get_delivery_summary(period)
 
 
+@router.get("/forward-delivery")
+def forward_delivery():
+    """Forward-looking next-week and next-month delivery averages from the forecast model."""
+    if not pipeline.ready:
+        raise HTTPException(503, "Pipeline not ready yet")
+    return pipeline.get_forward_delivery()
+
+
 @router.get("/metrics")
 def model_metrics():
     """Model performance metrics (MAE, RMSE, Tail-MAE)."""

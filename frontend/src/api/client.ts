@@ -47,6 +47,12 @@ export const api = {
   signal: () =>
     request<{ signals: Array<{ date: string; forecast_price: number; benchmark_price: number; signal_z: number; action: string }> }>("/api/forecast/signal"),
 
+  forwardDelivery: () =>
+    request<{
+      next_week: { label: string; period: string; base_avg: number; peak_avg: number; offpeak_avg: number; n_days: number; daily: Array<{ date: string; base_avg: number; peak_avg: number; offpeak_avg: number }> };
+      next_month: { label: string; period: string; base_avg: number; peak_avg: number; offpeak_avg: number; n_days: number; daily: Array<{ date: string; base_avg: number; peak_avg: number; offpeak_avg: number }> };
+    }>("/api/forecast/forward-delivery"),
+
   qa: () =>
     request<{
       summary_text: string;

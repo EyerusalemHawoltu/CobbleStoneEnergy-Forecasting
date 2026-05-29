@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
-import { Activity, BarChart2, ShieldCheck } from "lucide-react";
+import { Activity, BarChart2, ShieldCheck, TrendingUp } from "lucide-react";
 import ChatPanel from "./components/ChatPanel";
 import ForecastChart from "./components/ForecastChart";
 import MetricsPanel from "./components/MetricsPanel";
 import QAPanel from "./components/QAPanel";
 import SignalBadge from "./components/SignalBadge";
+import ForwardDeliveryPanel from "./components/ForwardDeliveryPanel";
 import { api } from "./api/client";
 import "./index.css";
 
-type Tab = "metrics" | "qa";
+type Tab = "metrics" | "delivery" | "qa";
 
 interface ChartState {
   type: "hourly" | "delivery";
@@ -82,7 +83,7 @@ export default function App() {
 
           {/* Tabs */}
           <div style={{ display: "flex", borderBottom: "1px solid var(--border)" }}>
-            {([["metrics", BarChart2, "Performance"], ["qa", ShieldCheck, "Data QA"]] as const).map(([tab, Icon, label]) => (
+            {([["metrics", BarChart2, "Performance"], ["delivery", TrendingUp, "Forward Curve"], ["qa", ShieldCheck, "Data QA"]] as const).map(([tab, Icon, label]) => (
               <button key={tab} onClick={() => setActiveTab(tab)} style={{
                 flex: 1, background: "none", border: "none", padding: "10px 0",
                 cursor: "pointer", fontSize: 12, fontWeight: 500,
@@ -100,7 +101,7 @@ export default function App() {
           {/* Tab content */}
           <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px" }}>
             {ready === true ? (
-              activeTab === "metrics" ? <MetricsPanel /> : <QAPanel />
+              activeTab === "metrics" ? <MetricsPanel /> : activeTab === "delivery" ? <ForwardDeliveryPanel /> : <QAPanel />
             ) : (
               <div style={{ color: "var(--muted)", fontSize: 12, padding: "20px 0", textAlign: "center" }}>
                 {ready === false ? "Pipeline initialising… (this takes ~7 min on first run)" : "Connecting to backend…"}
